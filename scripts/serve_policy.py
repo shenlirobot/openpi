@@ -20,6 +20,13 @@ class EnvMode(enum.Enum):
     LIBERO = "libero"
 
 
+class LiberoModelType(enum.Enum):
+    """LIBERO model types."""
+
+    LIBERO = "libero"  # Uses pi05_libero config and checkpoint
+    BASE = "base"      # Uses pi05_base with LIBERO normalization stats
+
+
 @dataclasses.dataclass
 class Checkpoint:
     """Load a policy from a trained checkpoint."""
@@ -31,16 +38,14 @@ class Checkpoint:
 
 
 @dataclasses.dataclass
-class Default:
-    """Use the default policy for the given environment."""
-
-
-@dataclasses.dataclass
 class Args:
     """Arguments for the serve_policy script."""
 
     # Environment to serve the policy for. This is only used when serving default policies.
     env: EnvMode = EnvMode.ALOHA_SIM
+
+    # For LIBERO environment, specify which model type to use
+    libero_model_type: LiberoModelType = LiberoModelType.BASE
 
     # If provided, will be used in case the "prompt" key is not present in the data, or if the model doesn't have a default
     # prompt.
@@ -52,7 +57,7 @@ class Args:
     record: bool = False
 
     # Specifies how to load the policy. If not provided, the default policy for the environment will be used.
-    policy: Checkpoint | Default = dataclasses.field(default_factory=Default)
+    policy: Checkpoint | None = None
 
 
 # Default checkpoints that should be used for each environment.
@@ -75,25 +80,53 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     ),
 }
 
+# LIBERO-specific checkpoints
+LIBERO_CHECKPOINTS: dict[LiberoModelType, Checkpoint] = {
+    LiberoModelType.LIBERO: Checkpoint(
+        config="pi05_libero",
+        dir="gs://openpi-assets/checkpoints/pi05_libero",
+    ),
+    LiberoModelType.BASE: Checkpoint(
+        config="pi05_base_libero_norm",
+        dir="gs://openpi-assets/checkpoints/pi05_base",
+    ),
+}
 
-def create_default_policy(env: EnvMode, *, default_prompt: str | None = None) -> _policy.Policy:
+
+def create_default_policy(env: EnvMode, *, default_prompt: str | None = None, libero_model_type: LiberoModelType = LiberoModelType.BASE) -> _policy.Policy:
     """Create a default policy for the given environment."""
-    if checkpoint := DEFAULT_CHECKPOINT.get(env):
-        return _policy_config.create_trained_policy(
-            _config.get_config(checkpoint.config), checkpoint.dir, default_prompt=default_prompt
-        )
-    raise ValueError(f"Unsupported environment mode: {env}")
+    if env == EnvMode.LIBERO:
+        checkpoint = LIBERO_CHECKPOINTS[libero_model_type]
+    elif checkpoint := DEFAULT_CHECKPOINT.get(env):
+        pass
+    else:
+        raise ValueError(f"Unsupported environment mode: {env}")
+    
+    train_config = _config.get_config(checkpoint.config)
+    data_config = train_config.data.create(train_config.assets_dirs, train_config.model)
+    
+    # Load normalization stats from AssetsConfig if available
+    norm_stats = None
+    if hasattr(data_config, 'norm_stats') and data_config.norm_stats is not None:
+        norm_stats = data_config.norm_stats
+    
+    return _policy_config.create_trained_policy(
+        train_config, checkpoint.dir, default_prompt=default_prompt, norm_stats=norm_stats
+    )
 
 
 def create_policy(args: Args) -> _policy.Policy:
     """Create a policy from the given arguments."""
-    match args.policy:
-        case Checkpoint():
-            return _policy_config.create_trained_policy(
-                _config.get_config(args.policy.config), args.policy.dir, default_prompt=args.default_prompt
-            )
-        case Default():
-            return create_default_policy(args.env, default_prompt=args.default_prompt)
+    if args.policy is not None:
+        return _policy_config.create_trained_policy(
+            _config.get_config(args.policy.config), args.policy.dir, default_prompt=args.default_prompt
+        )
+    else:
+        return create_default_policy(
+            args.env, 
+            default_prompt=args.default_prompt,
+            libero_model_type=args.libero_model_type
+        )
 
 
 def main(args: Args) -> None:
