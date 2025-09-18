@@ -1,0 +1,5 @@
+benchmark_root: /data/scratch/shenli/openpi/third_party/libero/libero/libero
+bddl_files: /data/scratch/shenli/openpi/third_party/libero/libero/libero/bddl_files
+init_states: /data/scratch/shenli/openpi/third_party/libero/libero/libero/init_files
+datasets: /data/scratch/shenli/openpi/third_party/libero/libero/datasets
+assets: /data/scratch/shenli/openpi/third_party/libero/libero/libero/assets
