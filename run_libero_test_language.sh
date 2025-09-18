@@ -21,8 +21,8 @@ fi
 
 # 1) start SERVER in background
 conda activate /data/scratch/shenli/envs/pi-srv
-# python scripts/serve_policy.py --env LIBERO --libero-model-type BASE --port "$PORT" &
-python scripts/serve_policy.py --env LIBERO --libero-model-type LIBERO --port "$PORT" &
+python scripts/serve_policy.py --env LIBERO --libero-model-type BASE --port "$PORT" &
+# python scripts/serve_policy.py --env LIBERO --libero-model-type LIBERO --port "$PORT" &
 SERVER_PID=$!
 
 # wait for server (raw TCP probe; may log a harmless handshake error)
@@ -44,7 +44,7 @@ done
 
 # 2) run CLIENT in foreground
 conda activate /data/scratch/shenli/envs/libero
-python examples/libero/main.py --args.task-suite-name libero_10 --args.num-trials-per-task 1 --args.host localhost --args.port "$PORT"
+python examples/libero/main_test_language.py --args.task-suite-name libero_10 --args.num-trials-per-task 5 --args.host localhost --args.port "$PORT"
 
 # 3) cleanup
 echo "[info] client finished; stopping server..."
